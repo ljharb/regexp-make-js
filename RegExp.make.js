@@ -37,7 +37,8 @@ RegExp.make = (function () {
     if (0x20 <= n && n <= 0x7e) {
       return String.fromCharCode(n).replace(UNSAFE_CHARS_CHARSET, '\\$&');
     }
-    var hex = n.toString(16);
+    /** @type {string} */
+    const hex = n.toString(16);
     return '\\u0000'.substring(0, 6 - hex.length) + hex;
   }
 
@@ -87,14 +88,7 @@ RegExp.make = (function () {
    * @this {!CharRanges}
    */
   CharRanges.prototype.toString = function () {
-    var s = '';
-    /** @type {!Array.<number>}. */
-    const ranges = this.ranges;
-    /** @type {number} */
-    const n = ranges.length;
-    for (var i = 0; i < n; ++i) {
-      /** @type {number} */
-      const leftAndSpan = ranges[i];
+    return this.ranges.reduce(function (s, leftAndSpan) {
       const left = leftAndSpan >> 16;
       const span = leftAndSpan & 0xffff;
       s += encodeRangeEndPoint(left);
@@ -102,8 +96,8 @@ RegExp.make = (function () {
         if (span !== 1) { s += '-'; }
         s += encodeRangeEndPoint(left + span);
       }
-    }
-    return s;
+      return s;
+    }, '');
   };
   /**
    * The minimum code-point matched or NaN.
@@ -125,9 +119,8 @@ RegExp.make = (function () {
    * @return {!CharRanges} this to allow chaining.
    */
   CharRanges.prototype.addRange = function (left, opt_right) {
-    var right = opt_right || left;
+    const right = +(opt_right || left);
     left = +left;
-    right = +right;
     if ('number' !== typeof left
         || left < 0 || right > MAX_CHAR_IN_RANGE || left > right
         || left % 1 || right % 1) {
@@ -160,12 +153,9 @@ RegExp.make = (function () {
     /** @type {!Array.<number>} */
     const ranges = this.ranges;
     /** @type {number} */
-    const n = ranges.length;
-    var pastLastRight = 0;
+    let pastLastRight = 0;
     const invertedRanges = [];
-    for (var i = 0; i < n; ++i) {
-      /** @type {number} */
-      const leftAndSpan = ranges[i];
+    ranges.forEach(function (leftAndSpan) {
       const left = leftAndSpan >> 16;
       const span = leftAndSpan & 0xFFFF;
       if (pastLastRight < left) {
@@ -175,7 +165,7 @@ RegExp.make = (function () {
         );
       }
       pastLastRight = left + span + 1;
-    }
+    });
     if (pastLastRight <= MAX_CHAR_IN_RANGE) {
       invertedRanges.push(
         (pastLastRight << 16)
@@ -229,14 +219,8 @@ RegExp.make = (function () {
    * @return {!CharRanges} a newly allocated output.  Not modified in place.
    */
   CharRanges.prototype.intersectionWithRange = function (min, max) {
-    /** @type {!Array.<number>} */
-    const ranges = this.ranges;
     const intersection = new CharRanges();
-    /** @type {number} */
-    const n = ranges.length;
-    for (var i = 0; i < n; ++i) {
-      /** @type {number} */
-      const leftAndSpan = ranges[i];
+    this.ranges.forEach(function (leftAndSpan) {
       const left = leftAndSpan >> 16;
       const span = leftAndSpan & 0xFFFF;
       /** @type {number} */
@@ -245,7 +229,7 @@ RegExp.make = (function () {
       if (!(left > max || right < min)) {
         intersection.addRange(Math.max(min, left), Math.min(max, right));
       }
-    }
+    });
     return intersection;
   };
   /**
@@ -265,19 +249,13 @@ RegExp.make = (function () {
    * @this {!CharRanges}
    */
   CharRanges.prototype.forEachRange = function (callback) {
-    /** @type {!Array.<number>} */
-    const ranges = this.ranges;
-    /** @type {number} */
-    const n = ranges.length;
-    for (var i = 0; i < n; ++i) {
-      /** @type {number} */
-      const leftAndSpan = ranges[i];
+    this.ranges.forEach(function (leftAndSpan) {
       const left = leftAndSpan >> 16;
       const span = leftAndSpan & 0xFFFF;
       /** @type {number} */
       const right = left + span;
       callback(left, right);
-    }
+    });
   };
   CharRanges.prototype.clear = function () {
     this.ranges.length = 0;
@@ -380,9 +358,9 @@ RegExp.make = (function () {
       if (operators) {
         tokens.push(
           '[' + operatorChars.replace(UNSAFE_CHARS_CHARSET, '\\$&') + ']');
-        for (var i = 0, nOpChars = operatorChars.length; i < nOpChars; ++i) {
-          careChars.addRange(operatorChars.charCodeAt(i));
-        }
+        Array.prototype.forEach.call(operatorChars, function (c) {
+          careChars.addRange(c.charCodeAt(0));
+        });
       }
 
       // I really wish we had a nice way of composing regular expressions.
@@ -441,10 +419,9 @@ RegExp.make = (function () {
       const nSourceTokens = sourceTokens ? sourceTokens.length : 0;
 
       // Assert that our tokenizer matched the whole input.
-      var totalSourceTokenLength = 0;
-      for (var i = 0; i < nSourceTokens; ++i) {
-        totalSourceTokenLength += sourceTokens[i].length;
-      }
+      var totalSourceTokenLength = sourceTokens.reduce(function (length, token) {
+        return length + token.length;
+      }, 0);
       if (blockSource.length !== totalSourceTokenLength) {
         throw new Error(
           'Failed to tokenize ' + blockSource + ' with ' + tokenizer + '. Got '
@@ -452,9 +429,7 @@ RegExp.make = (function () {
           + (blockSource.length - totalSourceTokenLength));
       }
 
-      for (var i = 0; i < nSourceTokens; ++i) {
-        /** @type {string} */
-        const sourceToken = sourceTokens[i];
+      sourceTokens.forEach(function (sourceToken) {
         switch (sourceToken[0]) {
         case '[':
           /** @type {boolean} */
@@ -511,7 +486,7 @@ RegExp.make = (function () {
         default:
           other(sourceToken);
         }
-      }
+      });
 
       return outputContext;
     };
@@ -663,9 +638,9 @@ RegExp.make = (function () {
           (negCharRanges || charRanges).addRange(left, right);
         },
         other: function (s) {
-          for (var i = 0, n = s.length; i < n; ++i) {
-            charRanges.addRange(s.charCodeAt(i));
-          }
+          Array.prototype.forEach.call(s, function (c) {
+            charRanges.addRange(c.charCodeAt(0));
+          });
         }
       })(
       Context.BLOCK,
